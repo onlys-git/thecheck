@@ -264,6 +264,57 @@
       .top-brand{flex-direction:column;align-items:flex-start}
       .brand-mascot{width:92px;height:92px}
     }
+
+    .toolbar-grid{
+      display:grid;
+      grid-template-columns:minmax(320px, 1.25fr) auto auto;
+      gap:12px;
+      align-items:start;
+    }
+    .toolbar-group{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .toolbar-main input,
+    .toolbar-main select{
+      flex:1 1 0;
+      min-width:150px;
+      max-width:none !important;
+    }
+    .toolbar-actions,
+    .toolbar-utils{
+      justify-content:flex-start;
+    }
+    .toolbar-actions button,
+    .toolbar-utils button{
+      white-space:nowrap;
+    }
+    .toolbar-status{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    @media (max-width:1200px){
+      .toolbar-grid{
+        grid-template-columns:1fr;
+      }
+      .toolbar-main{
+        display:grid;
+        grid-template-columns:1fr 1fr 1fr;
+      }
+      .toolbar-main input,
+      .toolbar-main select{
+        min-width:0;
+      }
+    }
+    @media (max-width:760px){
+      .toolbar-main{
+        grid-template-columns:1fr;
+      }
+    }
 </style>
 </head>
 <body>
@@ -282,17 +333,19 @@
 </div>
 
   <div class="panel toolbar">
-    <div class="toolbar-row" style="justify-content:space-between">
-      <div class="toolbar-row" style="flex:1">
-        <input type="date" id="currentDate" style="max-width:200px">
-        <select id="currentCategory" style="max-width:220px"></select>
-        <select id="weekSelect" style="max-width:220px"></select>
+    <div class="toolbar-grid">
+      <div class="toolbar-group toolbar-main">
+        <input type="date" id="currentDate">
+        <select id="currentCategory"></select>
+        <select id="weekSelect"></select>
+      </div>
+      <div class="toolbar-group toolbar-actions">
         <button class="ghost" id="todayBtn">오늘로</button>
         <button class="ghost" id="loadCloudBtn">클라우드 불러오기</button>
         <button class="primary" id="saveCloudBtn">클라우드 저장</button>
         <button class="ghost" id="goHistoryBtn">누적 검색으로</button>
       </div>
-      <div class="toolbar-row">
+      <div class="toolbar-group toolbar-utils">
         <button class="ghost" id="exportBtn">CSV 저장</button>
         <button class="ghost" id="backupBtn">전체 백업</button>
         <button class="ghost" id="restoreBtn">백업 불러오기</button>
@@ -300,8 +353,10 @@
         <button class="red" id="resetBtn">현재 항목 초기화</button>
       </div>
     </div>
-    <div class="muted" style="margin-top:8px" id="modeHint"></div>
-    <div class="muted" style="margin-top:6px" id="cloudStatus">클라우드 연결 전</div>
+    <div class="toolbar-status">
+      <div class="muted" id="modeHint"></div>
+      <div class="muted" id="cloudStatus">클라우드 연결 전</div>
+    </div>
   </div>
 
   <div class="stats">
