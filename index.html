@@ -489,6 +489,35 @@
     @media (max-width:900px){
       .click-summary-grid{grid-template-columns:repeat(2,1fr);}
     }
+
+    .status-side{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-left:auto;
+      flex-shrink:0;
+    }
+    .prev-week-dots{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .prev-week-dot{
+      width:46px;
+      height:46px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.08);
+      flex-shrink:0;
+    }
+    .prev-submit{background:#00c73c;}
+    .prev-missing{background:#ff3b30;}
+    .prev-na{background:#9ca3af;}
+    .prev-empty{background:#d1d5db;}
+    @media (max-width:900px){
+      .status-side{gap:8px;}
+      .prev-week-dot{width:28px;height:28px;}
+      .badge{min-width:72px;height:72px;font-size:14px;}
+    }
 </style>
 </head>
 <body>
@@ -734,6 +763,24 @@ function formatPeriodKey(periodKey, category=currentCategory){
   }
   return formatDate(periodKey);
 }
+function getRelativeWeekKey(baseWeekKey, offsetWeeks){
+  const start = normalizeWeekKey(baseWeekKey || currentWeekKey || currentDate);
+  return addDays(start, offsetWeeks * 7);
+}
+function getWeeklyStatusClass(status){
+  if(status==="제출") return "prev-submit";
+  if(status==="미제출") return "prev-missing";
+  if(status==="해당 없음") return "prev-na";
+  return "prev-empty";
+}
+function getPreviousWeeklyEntry(student, offsetWeeks){
+  if(isAttendanceCategory(currentCategory)) return null;
+  const weekKey = getRelativeWeekKey(currentWeekKey || currentDate, offsetWeeks);
+  ensurePeriodRecord(weekKey);
+  const entry = state.records[weekKey]?.[student]?.[currentCategory];
+  if(!entry) return { weekKey, value: "기록 없음" };
+  return { weekKey, value: normalizeValue(currentCategory, entry.value) };
+}
 function normalizeValue(category, value){
   if(isAttendanceCategory(category)){
     if(value==="결석" || value==="조퇴" || value==="지각" || value==="미체크") return value;
@@ -808,7 +855,9 @@ function renderSelectors(){refreshCurrentWeekKey(); const catSel=document.getEle
 function renderChips(){const box=document.getElementById("categoryChips"); box.innerHTML=""; state.categories.forEach(cat=>{const wrap=document.createElement("div"); wrap.className="chip-wrap"; const btn=document.createElement("button"); btn.className="chip"+(cat===currentCategory?" active":""); btn.textContent=cat; btn.onclick=()=>{currentCategory=cat; draftNotes={}; refreshCurrentWeekKey(); render()}; wrap.appendChild(btn); if(!DEFAULT_CATEGORIES.includes(cat)){const del=document.createElement("button"); del.className="red"; del.textContent="삭제"; del.onclick=()=>{if(!confirm(`'${cat}' 항목을 삭제할까?`)) return; state.categories=state.categories.filter(c=>c!==cat); Object.keys(state.records).forEach(period=>state.students.forEach(student=>delete state.records[period][student][cat])); if(!state.categories.includes(currentCategory)) currentCategory=(state.categories[0]==="출결 체크"?"출결":state.categories[0])||"출결"; saveState(); render()}; wrap.appendChild(del)} box.appendChild(wrap)})}
 function renderSideList(){const box=document.getElementById("studentSideList"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach((student,idx)=>{const entry=state.records[period][student]?.[currentCategory]; const item=document.createElement("div"); item.className="mini-item"; item.innerHTML=`<div><div style="font-weight:800">${idx+1}. ${student}</div><div class="muted" style="font-size:12px">${String(normalizeValue(currentCategory, entry?.value) ?? "-")}</div></div>`; box.appendChild(item)})}
 function renderBulkArea(){const box=document.getElementById("bulkArea"); box.innerHTML=""; if(isWeeklyCategory(currentCategory)){const submit=document.createElement("button"); submit.className="green"; submit.textContent="전체 제출"; submit.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="제출"}); saveState(); render()}; const missing=document.createElement("button"); missing.className="ghost"; missing.textContent="전체 미제출"; missing.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="미제출"}); saveState(); render()}; const na=document.createElement("button"); na.className="gray"; na.textContent="전체 해당 없음"; na.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="해당 없음"}); saveState(); render()}; box.appendChild(submit); box.appendChild(missing); box.appendChild(na)}}
-function renderStudents(){const box=document.getElementById("studentGrid"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); filteredStudents().forEach((student,idx)=>{const entry=state.records[period][student][currentCategory]; const card=document.createElement("div"); card.className="student-card"; const weekly=isWeeklyCategory(currentCategory); card.innerHTML=`<div class="student-head"><div class="name-wrap">${getStudentPhoto(student)?`<div class="num photo" style="background-image:url(${getStudentPhoto(student)})"></div>`:`<div class="num placeholder">${idx+1}</div>`}<div class="name">${student}</div></div>${badge(entry,!weekly)}</div><div class="toolbar-row" style="margin-bottom:8px"><button class="ghost small meta-btn" data-a="rename">이름 수정</button><button class="ghost small meta-btn" data-a="delete">학생 삭제</button></div>${weekly?`<div class="actions three"><button class="action-btn action-submit" data-a="제출">제출</button><button class="action-btn action-missing" data-a="미제출">미제출</button><button class="action-btn action-na" data-a="해당 없음">해당 없음</button></div>`:`<div class="actions"><button class="action-btn action-unchecked" data-a="미체크">미체크</button><button class="action-btn action-absent" data-a="결석">결석</button><button class="action-btn action-leave" data-a="조퇴">조퇴</button><button class="action-btn action-late" data-a="지각">지각</button></div>`}<div class="note-box"><textarea placeholder="${weekly?"예: 이번 주는 과제가 없었음.":"예: 감기, 병원 진료"}">${draftNotes[student] ?? entry.note ?? ""}</textarea><button class="ghost">특기사항 저장</button></div>`; card.querySelectorAll("[data-a]").forEach(btn=>{btn.onclick=()=>{if(btn.dataset.a==="rename"){const newName=prompt("새 학생 이름을 입력해줘.", student); if(newName!==null){renameStudent(student,newName); saveState(); render()} return;} if(btn.dataset.a==="delete"){deleteStudent(student); return;} state.records[period][student][currentCategory].value=btn.dataset.a; saveState(); render()}}); const textarea=card.querySelector("textarea"); textarea.oninput=e=>{draftNotes[student]=e.target.value}; card.querySelector(".note-box button").onclick=()=>{state.records[period][student][currentCategory].note=textarea.value||""; draftNotes[student]=textarea.value||""; saveState(); render()}; box.appendChild(card)})}
+function renderStudents(){const box=document.getElementById("studentGrid"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); filteredStudents().forEach((student,idx)=>{const entry=state.records[period][student][currentCategory]; const card=document.createElement("div"); card.className="student-card"; const weekly=isWeeklyCategory(currentCategory); const prev1 = weekly ? getPreviousWeeklyEntry(student, -1) : null;
+const prev2 = weekly ? getPreviousWeeklyEntry(student, -2) : null;
+card.innerHTML=`<div class="student-head"><div class="name-wrap">${getStudentPhoto(student)?`<div class="num photo" style="background-image:url(${getStudentPhoto(student)})"></div>`:`<div class="num placeholder">${idx+1}</div>`}<div class="name">${student}</div></div><div class="status-side">${weekly?`<div class="prev-week-dots" title="왼쪽부터 지난주, 지지난주"><div class="prev-week-dot ${getWeeklyStatusClass(prev1?.value)}"></div><div class="prev-week-dot ${getWeeklyStatusClass(prev2?.value)}"></div></div>`:""}${badge(entry,!weekly)}</div></div><div class="toolbar-row" style="margin-bottom:8px"><button class="ghost small meta-btn" data-a="rename">이름 수정</button><button class="ghost small meta-btn" data-a="delete">학생 삭제</button></div>${weekly?`<div class="actions three"><button class="action-btn action-submit" data-a="제출">제출</button><button class="action-btn action-missing" data-a="미제출">미제출</button><button class="action-btn action-na" data-a="해당 없음">해당 없음</button></div>`:`<div class="actions"><button class="action-btn action-unchecked" data-a="미체크">미체크</button><button class="action-btn action-absent" data-a="결석">결석</button><button class="action-btn action-leave" data-a="조퇴">조퇴</button><button class="action-btn action-late" data-a="지각">지각</button></div>`}<div class="note-box"><textarea placeholder="${weekly?"예: 이번 주는 과제가 없었음.":"예: 감기, 병원 진료"}">${draftNotes[student] ?? entry.note ?? ""}</textarea><button class="ghost">특기사항 저장</button></div>`; card.querySelectorAll("[data-a]").forEach(btn=>{btn.onclick=()=>{if(btn.dataset.a==="rename"){const newName=prompt("새 학생 이름을 입력해줘.", student); if(newName!==null){renameStudent(student,newName); saveState(); render()} return;} if(btn.dataset.a==="delete"){deleteStudent(student); return;} state.records[period][student][currentCategory].value=btn.dataset.a; saveState(); render()}}); const textarea=card.querySelector("textarea"); textarea.oninput=e=>{draftNotes[student]=e.target.value}; card.querySelector(".note-box button").onclick=()=>{state.records[period][student][currentCategory].note=textarea.value||""; draftNotes[student]=textarea.value||""; saveState(); render()}; box.appendChild(card)})}
 function historyRows(){const start=document.getElementById("historyStart").value, end=document.getElementById("historyEnd").value, studentFilter=document.getElementById("historyStudent").value, categoryFilter=document.getElementById("historyCategory").value, mode=document.getElementById("historyMode").value; const rows=[]; Object.keys(state.records).sort().forEach(period=>{const normalizedPeriod = (categoryFilter!=="전체" ? null : null); const monthKey=(/^\d{4}-\d{2}-\d{2}$/.test(period) ? normalizeWeekKey(period).slice(0,7) : period.slice(0,7)); if(start&&monthKey<start) return; if(end&&monthKey>end) return; state.students.forEach(student=>{const rec=state.records[period][student]; if(!rec) return; state.categories.forEach(category=>{const entry=rec[category]; if(!entry) return; const row={period,student,category,value:normalizeValue(category, entry.value),note:entry.note||""}; if(studentFilter!=="전체"&&row.student!==studentFilter) return; if(categoryFilter!=="전체"&&row.category!==categoryFilter) return; if(mode==="결석만"&&!(row.category==="출결"&&row.value==="결석")) return; if(mode==="조퇴만"&&!(row.category==="출결"&&row.value==="조퇴")) return; if(mode==="지각만"&&!(row.category==="출결"&&row.value==="지각")) return; if(mode==="미제출만"&&!(row.category!=="출결"&&row.value==="미제출")) return; if(mode==="제출만"&&!(row.category!=="출결"&&row.value==="제출")) return; if(mode==="해당없음만"&&!(row.category!=="출결"&&row.value==="해당 없음")) return; if(mode==="메모만"&&!String(row.note||"").trim()) return; rows.push(row)})})}); return rows}
 function exportCsv(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); const rows=[["번호","이름","기준", ...state.categories.flatMap(cat=>[cat, `${cat} 특기사항`])]]; state.students.forEach((student,idx)=>{const row=[idx+1,student,formatPeriodKey(period, currentCategory)]; state.categories.forEach(cat=>{const entry=state.records[period][student][cat]; row.push(entry?.value??""); row.push(entry?.note??"")}); rows.push(row)}); const csv=rows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`학생체크_${formatPeriodKey(period)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)}
 
