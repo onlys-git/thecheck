@@ -494,14 +494,14 @@
       display:flex;
       flex:0 0 auto;
       align-items:center;
-      gap:12px;
+      gap:10px;
       margin-left:auto;
       flex-shrink:0;
     }
     .prev-week-dots{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:8px;
     }
     .prev-week-dot{
       width:30px;
@@ -898,7 +898,8 @@ function renderSideList(){const box=document.getElementById("studentSideList"); 
 function renderBulkArea(){const box=document.getElementById("bulkArea"); box.innerHTML=""; if(isWeeklyCategory(currentCategory)){const submit=document.createElement("button"); submit.className="green"; submit.textContent="전체 제출"; submit.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="제출"}); saveState(); render()}; const missing=document.createElement("button"); missing.className="ghost"; missing.textContent="전체 미제출"; missing.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="미제출"}); saveState(); render()}; const na=document.createElement("button"); na.className="gray"; na.textContent="전체 해당 없음"; na.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="해당 없음"}); saveState(); render()}; box.appendChild(submit); box.appendChild(missing); box.appendChild(na)}}
 function renderStudents(){const box=document.getElementById("studentGrid"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); filteredStudents().forEach((student,idx)=>{const entry=state.records[period][student][currentCategory]; const card=document.createElement("div"); card.className="student-card"; const weekly=isWeeklyCategory(currentCategory); const prev1 = weekly ? getPreviousWeeklyEntry(student, -1) : null;
 const prev2 = weekly ? getPreviousWeeklyEntry(student, -2) : null;
-card.innerHTML=`<div class="student-head"><div class="name-wrap">${getStudentPhoto(student)?`<div class="num photo" style="background-image:url(${getStudentPhoto(student)})"></div>`:`<div class="num placeholder">${idx+1}</div>`}<div class="name">${student}</div></div><div class="status-side">${weekly?`<div class="prev-week-dots" title="왼쪽부터 지난주, 지지난주"><div class="prev-week-dot ${getWeeklyStatusClass(prev1?.value)}"></div><div class="prev-week-dot ${getWeeklyStatusClass(prev2?.value)}"></div></div>`:""}${badge(entry,!weekly)}</div></div><div class="toolbar-row" style="margin-bottom:8px"><button class="ghost small meta-btn" data-a="rename">이름 수정</button><button class="ghost small meta-btn" data-a="delete">학생 삭제</button></div>${weekly?`<div class="actions three"><button class="action-btn action-submit" data-a="제출">제출</button><button class="action-btn action-missing" data-a="미제출">미제출</button><button class="action-btn action-na" data-a="해당 없음">해당 없음</button></div>`:`<div class="actions"><button class="action-btn action-unchecked" data-a="미체크">미체크</button><button class="action-btn action-absent" data-a="결석">결석</button><button class="action-btn action-leave" data-a="조퇴">조퇴</button><button class="action-btn action-late" data-a="지각">지각</button></div>`}<div class="note-box"><textarea placeholder="${weekly?"예: 이번 주는 과제가 없었음.":"예: 감기, 병원 진료"}">${draftNotes[student] ?? entry.note ?? ""}</textarea><button class="ghost">특기사항 저장</button></div>`; card.querySelectorAll("[data-a]").forEach(btn=>{btn.onclick=()=>{if(btn.dataset.a==="rename"){const newName=prompt("새 학생 이름을 입력해줘.", student); if(newName!==null){renameStudent(student,newName); saveState(); render()} return;} if(btn.dataset.a==="delete"){deleteStudent(student); return;} state.records[period][student][currentCategory].value=btn.dataset.a; saveState(); render()}}); const textarea=card.querySelector("textarea"); textarea.oninput=e=>{draftNotes[student]=e.target.value}; card.querySelector(".note-box button").onclick=()=>{state.records[period][student][currentCategory].note=textarea.value||""; draftNotes[student]=textarea.value||""; saveState(); render()}; box.appendChild(card)})}
+const prevDots = weekly ? [prev2, prev1].filter(Boolean).map(p=>`<div class="prev-week-dot ${getWeeklyStatusClass(p?.value)}"></div>`).join("") : "";
+card.innerHTML=`<div class="student-head"><div class="name-wrap">${getStudentPhoto(student)?`<div class="num photo" style="background-image:url(${getStudentPhoto(student)})"></div>`:`<div class="num placeholder">${idx+1}</div>`}<div class="name">${student}</div></div><div class="status-side">${weekly && prevDots ? `<div class="prev-week-dots" title="왼쪽부터 전전주, 전주">${prevDots}</div>` : ""}${badge(entry,!weekly)}</div></div><div class="toolbar-row" style="margin-bottom:8px"><button class="ghost small meta-btn" data-a="rename">이름 수정</button><button class="ghost small meta-btn" data-a="delete">학생 삭제</button></div>${weekly?`<div class="actions three"><button class="action-btn action-submit" data-a="제출">제출</button><button class="action-btn action-missing" data-a="미제출">미제출</button><button class="action-btn action-na" data-a="해당 없음">해당 없음</button></div>`:`<div class="actions"><button class="action-btn action-unchecked" data-a="미체크">미체크</button><button class="action-btn action-absent" data-a="결석">결석</button><button class="action-btn action-leave" data-a="조퇴">조퇴</button><button class="action-btn action-late" data-a="지각">지각</button></div>`}<div class="note-box"><textarea placeholder="${weekly?"예: 이번 주는 과제가 없었음.":"예: 감기, 병원 진료"}">${draftNotes[student] ?? entry.note ?? ""}</textarea><button class="ghost">특기사항 저장</button></div>`; card.querySelectorAll("[data-a]").forEach(btn=>{btn.onclick=()=>{if(btn.dataset.a==="rename"){const newName=prompt("새 학생 이름을 입력해줘.", student); if(newName!==null){renameStudent(student,newName); saveState(); render()} return;} if(btn.dataset.a==="delete"){deleteStudent(student); return;} state.records[period][student][currentCategory].value=btn.dataset.a; saveState(); render()}}); const textarea=card.querySelector("textarea"); textarea.oninput=e=>{draftNotes[student]=e.target.value}; card.querySelector(".note-box button").onclick=()=>{state.records[period][student][currentCategory].note=textarea.value||""; draftNotes[student]=textarea.value||""; saveState(); render()}; box.appendChild(card)})}
 function historyRows(){
   const start=document.getElementById("historyStart").value,
         end=document.getElementById("historyEnd").value,
@@ -920,6 +921,7 @@ function historyRows(){
       state.categories.forEach(category=>{
         if(isAttendanceCategory(category) && isWeeklyPeriod) return;
         if(!isAttendanceCategory(category) && !isWeeklyPeriod) return;
+        if(!isAttendanceCategory(category) && isWeeklyPeriod && !hasMeaningfulWeeklyRecord(period, category)) return;
 
         const entry=rec[category];
         if(!entry) return;
