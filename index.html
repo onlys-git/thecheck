@@ -315,6 +315,35 @@
         grid-template-columns:1fr;
       }
     }
+
+    .compact-status{
+      gap:4px;
+      min-height:24px;
+    }
+    .compact-status .muted{
+      font-size:12px;
+      line-height:1.3;
+    }
+    #cloudStatus:empty{
+      display:none;
+    }
+
+    .current-category-banner{
+      margin-top:4px;
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:-.03em;
+      color:#ffffff;
+      line-height:1.2;
+    }
+    .current-category-banner span{
+      color:#93c5fd;
+    }
+    @media (max-width:900px){
+      .current-category-banner{
+        font-size:22px;
+      }
+    }
 </style>
 </head>
 <body>
@@ -353,9 +382,12 @@
         <button class="red" id="resetBtn">현재 항목 초기화</button>
       </div>
     </div>
-    <div class="toolbar-status">
-      <div class="muted" id="modeHint"></div>
-      <div class="muted" id="cloudStatus">클라우드 연결 전</div>
+    <div class="toolbar-status compact-status">
+      <div class="current-category-banner">
+        현재 체크 항목: <span id="currentCategoryDisplay">-</span>
+      </div>
+      <div class="muted" id="modeHint">준비됨</div>
+      <div class="muted" id="cloudStatus"></div>
     </div>
   </div>
 
@@ -475,9 +507,51 @@ function normalize(s){return (s||"").replace(/\s+/g,"").trim()}
 function getStudentPhoto(name){return STUDENT_PHOTOS[name]||""}
 function isAttendanceCategory(category){return category==="출결" || category==="출결 체크"}
 function isWeeklyCategory(category){return !isAttendanceCategory(category)}
-function getMonthWeek(dateStr){const [y,m,d]=dateStr.split("-").map(Number); const week=Math.floor((d-1)/7)+1; return `${y}-${String(m).padStart(2,"0")}-W${week}`}
-function getWeekOptions(dateStr){const [y,m]=dateStr.split("-").map(Number); const lastDay=new Date(y,m,0).getDate(); const count=Math.ceil(lastDay/7); const arr=[]; for(let i=1;i<=count;i++){arr.push({key:`${y}-${String(m).padStart(2,"0")}-W${i}`,label:`${y}.${String(m).padStart(2,"0")} ${i}주`})} return arr}
-function formatPeriodKey(periodKey){if(periodKey.includes("-W")){const [ym,w]=periodKey.split("-W"); const [y,m]=ym.split("-"); return `${y}.${m} ${w}주`} return formatDate(periodKey)}
+function getWeekStart(dateStr){
+  const [y,m,d]=dateStr.split("-").map(Number);
+  const dt = new Date(y, m-1, d);
+  const day = dt.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  dt.setDate(dt.getDate() + diff);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth()+1).padStart(2,"0");
+  const dd = String(dt.getDate()).padStart(2,"0");
+  return `${yy}-${mm}-${dd}`;
+}
+function addDays(dateStr, days){
+  const [y,m,d]=dateStr.split("-").map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth()+1).padStart(2,"0");
+  const dd = String(dt.getDate()).padStart(2,"0");
+  return `${yy}-${mm}-${dd}`;
+}
+function getMonthWeek(dateStr){
+  return getWeekStart(dateStr);
+}
+function getWeekOptions(dateStr){
+  const activeStart = getWeekStart(dateStr);
+  const arr=[];
+  for(let i=-2;i<=6;i++){
+    const start = addDays(activeStart, i*7);
+    const end = addDays(start, 6);
+    const [,sm,sd] = start.split("-");
+    const [,em,ed] = end.split("-");
+    const label = sm===em ? `${sm}.${sd} ~ ${ed}` : `${sm}.${sd} ~ ${em}.${ed}`;
+    arr.push({key:start,label});
+  }
+  return arr;
+}
+function formatPeriodKey(periodKey){
+  if(/^\d{4}-\d{2}-\d{2}$/.test(periodKey) && !isAttendanceCategory(currentCategory)){
+    const end = addDays(periodKey, 6);
+    const [,sm,sd] = periodKey.split("-");
+    const [,em,ed] = end.split("-");
+    return sm===em ? `${sm}.${sd} ~ ${ed}` : `${sm}.${sd} ~ ${em}.${ed}`;
+  }
+  return formatDate(periodKey);
+}
 function emptyRecord(categories){const rec={}; categories.forEach(cat=>rec[cat]={value:isAttendanceCategory(cat)?"미체크":"미제출",note:""}); return rec}
 function loadState(){
   try{
@@ -528,7 +602,7 @@ function restoreBackupFromFile(file){if(!file){alert("백업 파일을 선택해
 function checkedCount(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); return state.students.filter(student=>{const value=state.records[period][student]?.[currentCategory]?.value; if(isAttendanceCategory(currentCategory)) return value!=="미체크"; return value==="제출"||value==="해당 없음"}).length}
 function filteredStudents(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); const q=normalize(document.getElementById("searchInput").value); return state.students.filter(student=>{if(q&&!normalize(student).includes(q)) return false; const value=state.records[period][student]?.[currentCategory]?.value; const checked=isAttendanceCategory(currentCategory)?value!=="미체크":(value==="제출"||value==="해당 없음"); if(filterMode==="checked") return checked; if(filterMode==="unchecked") return !checked; return true})}
 function badge(entry,attendance){const value=entry?.value; if(attendance){if(value==="결석") return '<span class="badge absent">결석</span>'; if(value==="조퇴") return '<span class="badge leave">조퇴</span>'; if(value==="지각") return '<span class="badge late">지각</span>'; return '<span class="badge idle">미체크</span>'} if(value==="제출") return '<span class="badge ok">제출</span>'; if(value==="해당 없음") return '<span class="badge na">해당 없음</span>'; return '<span class="badge absent">미제출</span>'}
-function renderSelectors(){refreshCurrentWeekKey(); const catSel=document.getElementById("currentCategory"), currentCat=currentCategory; catSel.innerHTML=""; state.categories.forEach(cat=>{const op=document.createElement("option"); op.value=cat; op.textContent=cat; if(cat===currentCat) op.selected=true; catSel.appendChild(op)}); const weekSel=document.getElementById("weekSelect"), opts=getWeekOptions(currentDate); weekSel.innerHTML=""; opts.forEach(o=>{const op=document.createElement("option"); op.value=o.key; op.textContent=o.label; if(o.key===currentWeekKey) op.selected=true; weekSel.appendChild(op)}); weekSel.style.display=isAttendanceCategory(currentCategory)?"none":"inline-block"; const histStudent=document.getElementById("historyStudent"), hs=histStudent.value||"전체"; histStudent.innerHTML='<option value="전체">전체 학생</option>'; state.students.forEach(s=>{const op=document.createElement("option"); op.value=s; op.textContent=s; histStudent.appendChild(op)}); histStudent.value=state.students.includes(hs)?hs:"전체"; const histCategory=document.getElementById("historyCategory"), hc=histCategory.value||"전체"; histCategory.innerHTML='<option value="전체">전체 항목</option>'; state.categories.forEach(c=>{const op=document.createElement("option"); op.value=c; op.textContent=c; histCategory.appendChild(op)}); histCategory.value=state.categories.includes(hc)?hc:"전체"; document.getElementById("modeHint").textContent=isAttendanceCategory(currentCategory)?"현재 항목은 날짜별로 기록돼.":"현재 항목은 주 단위로 기록돼. 같은 주에는 한 번만 제출 / 미제출 / 해당 없음으로 관리하면 돼."}
+function renderSelectors(){refreshCurrentWeekKey(); const catSel=document.getElementById("currentCategory"), currentCat=currentCategory; catSel.innerHTML=""; state.categories.forEach(cat=>{const op=document.createElement("option"); op.value=cat; op.textContent=cat; if(cat===currentCat) op.selected=true; catSel.appendChild(op)}); const weekSel=document.getElementById("weekSelect"), opts=getWeekOptions(currentDate); weekSel.innerHTML=""; opts.forEach(o=>{const op=document.createElement("option"); op.value=o.key; op.textContent=o.label; if(o.key===currentWeekKey) op.selected=true; weekSel.appendChild(op)}); weekSel.style.display=isAttendanceCategory(currentCategory)?"none":"inline-block"; const dateEl=document.getElementById("currentDate"); if(dateEl) dateEl.style.display=isAttendanceCategory(currentCategory)?"inline-block":"none"; const histStudent=document.getElementById("historyStudent"), hs=histStudent.value||"전체"; histStudent.innerHTML='<option value="전체">전체 학생</option>'; state.students.forEach(s=>{const op=document.createElement("option"); op.value=s; op.textContent=s; histStudent.appendChild(op)}); histStudent.value=state.students.includes(hs)?hs:"전체"; const histCategory=document.getElementById("historyCategory"), hc=histCategory.value||"전체"; histCategory.innerHTML='<option value="전체">전체 항목</option>'; state.categories.forEach(c=>{const op=document.createElement("option"); op.value=c; op.textContent=c; histCategory.appendChild(op)}); histCategory.value=state.categories.includes(hc)?hc:"전체"; document.getElementById("modeHint").textContent=isAttendanceCategory(currentCategory)?"출결은 날짜 기준":"주간 항목은 월~일 기준"}
 function renderChips(){const box=document.getElementById("categoryChips"); box.innerHTML=""; state.categories.forEach(cat=>{const wrap=document.createElement("div"); wrap.className="chip-wrap"; const btn=document.createElement("button"); btn.className="chip"+(cat===currentCategory?" active":""); btn.textContent=cat; btn.onclick=()=>{currentCategory=cat; draftNotes={}; refreshCurrentWeekKey(); render()}; wrap.appendChild(btn); if(!DEFAULT_CATEGORIES.includes(cat)){const del=document.createElement("button"); del.className="red"; del.textContent="삭제"; del.onclick=()=>{if(!confirm(`'${cat}' 항목을 삭제할까?`)) return; state.categories=state.categories.filter(c=>c!==cat); Object.keys(state.records).forEach(period=>state.students.forEach(student=>delete state.records[period][student][cat])); if(!state.categories.includes(currentCategory)) currentCategory=(state.categories[0]==="출결 체크"?"출결":state.categories[0])||"출결"; saveState(); render()}; wrap.appendChild(del)} box.appendChild(wrap)})}
 function renderSideList(){const box=document.getElementById("studentSideList"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach((student,idx)=>{const entry=state.records[period][student]?.[currentCategory]; const item=document.createElement("div"); item.className="mini-item"; item.innerHTML=`<div><div style="font-weight:800">${idx+1}. ${student}</div><div class="muted" style="font-size:12px">${String(entry?.value ?? "-")}</div></div>`; box.appendChild(item)})}
 function renderBulkArea(){const box=document.getElementById("bulkArea"); box.innerHTML=""; if(isWeeklyCategory(currentCategory)){const submit=document.createElement("button"); submit.className="green"; submit.textContent="전체 제출"; submit.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="제출"}); saveState(); render()}; const missing=document.createElement("button"); missing.className="ghost"; missing.textContent="전체 미제출"; missing.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="미제출"}); saveState(); render()}; const na=document.createElement("button"); na.className="gray"; na.textContent="전체 해당 없음"; na.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="해당 없음"}); saveState(); render()}; box.appendChild(submit); box.appendChild(missing); box.appendChild(na)}}
@@ -536,7 +610,8 @@ function renderStudents(){const box=document.getElementById("studentGrid"); box.
 function historyRows(){const start=document.getElementById("historyStart").value, end=document.getElementById("historyEnd").value, studentFilter=document.getElementById("historyStudent").value, categoryFilter=document.getElementById("historyCategory").value, mode=document.getElementById("historyMode").value; const rows=[]; Object.keys(state.records).sort().forEach(period=>{const monthKey=period.slice(0,7); if(start&&monthKey<start) return; if(end&&monthKey>end) return; state.students.forEach(student=>{const rec=state.records[period][student]; if(!rec) return; state.categories.forEach(category=>{const entry=rec[category]; if(!entry) return; const row={period,student,category,value:entry.value,note:entry.note||""}; if(studentFilter!=="전체"&&row.student!==studentFilter) return; if(categoryFilter!=="전체"&&row.category!==categoryFilter) return; if(mode==="결석만"&&!(row.category==="출결"&&row.value==="결석")) return; if(mode==="조퇴만"&&!(row.category==="출결"&&row.value==="조퇴")) return; if(mode==="지각만"&&!(row.category==="출결"&&row.value==="지각")) return; if(mode==="미제출만"&&!(row.category!=="출결"&&row.value==="미제출")) return; if(mode==="제출만"&&!(row.category!=="출결"&&row.value==="제출")) return; if(mode==="해당없음만"&&!(row.category!=="출결"&&row.value==="해당 없음")) return; if(mode==="메모만"&&!String(row.note||"").trim()) return; rows.push(row)})})}); return rows}
 function exportCsv(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); const rows=[["번호","이름","기준", ...state.categories.flatMap(cat=>[cat, `${cat} 특기사항`])]]; state.students.forEach((student,idx)=>{const row=[idx+1,student,formatPeriodKey(period)]; state.categories.forEach(cat=>{const entry=state.records[period][student][cat]; row.push(entry?.value??""); row.push(entry?.note??"")}); rows.push(row)}); const csv=rows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`학생체크_${formatPeriodKey(period)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)}
 function renderHistory(){const rows=historyRows(), body=document.getElementById("historyBody"); body.innerHTML=""; const sum={결석:0,조퇴:0,지각:0,제출:0,미제출:0,해당없음:0,메모:0}; rows.forEach(row=>{if(row.category==="출결"){if(row.value==="결석") sum.결석++; if(row.value==="조퇴") sum.조퇴++; if(row.value==="지각") sum.지각++;} else {if(row.value==="제출") sum.제출++; if(row.value==="미제출") sum.미제출++; if(row.value==="해당 없음") sum.해당없음++;} if(String(row.note||"").trim()) sum.메모++; const tr=document.createElement("tr"); tr.innerHTML=`<td>${formatPeriodKey(row.period)}</td><td>${row.student}</td><td>${row.category}</td><td>${row.value}</td><td>${row.note||"-"}</td>`; body.appendChild(tr)}); document.getElementById("sumAbsent").textContent=sum.결석; document.getElementById("sumLeave").textContent=sum.조퇴; document.getElementById("sumLate").textContent=sum.지각; document.getElementById("sumSubmitted").textContent=sum.제출; document.getElementById("sumMissing").textContent=sum.미제출; document.getElementById("sumNA").textContent=sum.해당없음; document.getElementById("sumNotes").textContent=sum.메모}
-function render(){refreshCurrentWeekKey(); ensurePeriodRecord(getCurrentPeriodKey()); draftNotes={}; saveState(); document.getElementById("currentDate").value=currentDate; document.getElementById("dateLabel").textContent=formatPeriodKey(getCurrentPeriodKey()); document.getElementById("totalStudents").textContent=state.students.length; const c=checkedCount(); document.getElementById("checkedCount").textContent=c; document.getElementById("uncheckedCount").textContent=state.students.length-c; renderSelectors(); renderChips(); renderSideList(); renderBulkArea(); renderStudents(); renderHistory()}
+function render(){refreshCurrentWeekKey(); ensurePeriodRecord(getCurrentPeriodKey()); draftNotes={}; saveState(); document.getElementById("currentDate").value=currentDate; document.getElementById("dateLabel").textContent=formatPeriodKey(getCurrentPeriodKey());
+  const catDisplay=document.getElementById("currentCategoryDisplay"); if(catDisplay) catDisplay.textContent=currentCategory; document.getElementById("totalStudents").textContent=state.students.length; const c=checkedCount(); document.getElementById("checkedCount").textContent=c; document.getElementById("uncheckedCount").textContent=state.students.length-c; renderSelectors(); renderChips(); renderSideList(); renderBulkArea(); renderStudents(); renderHistory()}
 
 function setCloudStatus(text){
   const el = document.getElementById("cloudStatus");
@@ -545,7 +620,7 @@ function setCloudStatus(text){
 
 async function saveCurrentToCloud() {
   try{
-    setCloudStatus("클라우드 저장 중...");
+    setCloudStatus("저장 중");
     const period = getCurrentPeriodKey();
     ensurePeriodRecord(period);
 
@@ -582,20 +657,20 @@ async function saveCurrentToCloud() {
 
     const result = await res.json();
     if (!result.success) {
-      setCloudStatus("클라우드 저장 실패");
-      alert("클라우드 저장 실패");
+      setCloudStatus("저장 실패");
+      alert("저장 실패");
       return;
     }
-    setCloudStatus("클라우드 저장 완료");
+    setCloudStatus("저장 완료");
   }catch(err){
-    setCloudStatus("클라우드 저장 실패");
+    setCloudStatus("저장 실패");
     alert("클라우드 저장 중 오류가 생겼어.");
   }
 }
 
 async function loadCurrentFromCloud() {
   try{
-    setCloudStatus("클라우드 불러오는 중...");
+    setCloudStatus("불러오는 중");
     let reqUrl = "";
 
     if (isAttendanceCategory(currentCategory)) {
@@ -608,8 +683,8 @@ async function loadCurrentFromCloud() {
     const result = await res.json();
 
     if (!result.success) {
-      setCloudStatus("클라우드 불러오기 실패");
-      alert("클라우드 불러오기 실패");
+      setCloudStatus("불러오기 실패");
+      alert("불러오기 실패");
       return;
     }
 
@@ -633,9 +708,9 @@ async function loadCurrentFromCloud() {
 
     saveState();
     render();
-    setCloudStatus("클라우드 불러오기 완료");
+    setCloudStatus("불러오기 완료");
   }catch(err){
-    setCloudStatus("클라우드 불러오기 실패");
+    setCloudStatus("불러오기 실패");
     alert("클라우드 불러오기 중 오류가 생겼어.");
   }
 }
