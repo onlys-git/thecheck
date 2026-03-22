@@ -613,8 +613,8 @@
           <div class="toolbar-row">
             <input id="searchInput" placeholder="학생 이름 검색" style="max-width:260px">
             <button class="ghost" data-filter="all">전체</button>
-            <button class="ghost" data-filter="checked">제출학생</button>
-            <button class="ghost" data-filter="unchecked">미제출학생</button>
+            <button class="ghost" data-filter="checked" id="checkedFilterLabel">제출학생</button>
+            <button class="ghost" data-filter="unchecked" id="uncheckedFilterLabel">미제출학생</button>
             <div id="bulkArea" class="toolbar-row"></div>
           </div>
           <div class="student-grid" id="studentGrid" style="margin-top:12px"></div>
@@ -893,6 +893,20 @@ function checkedCount(){const period=getCurrentPeriodKey(); ensurePeriodRecord(p
 function filteredStudents(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); const q=normalize(document.getElementById("searchInput").value); return state.students.filter(student=>{if(q&&!normalize(student).includes(q)) return false; const value=normalizeValue(currentCategory, state.records[period][student]?.[currentCategory]?.value); const checked=isAttendanceCategory(currentCategory)?value!=="미체크":(value==="제출"||value==="해당 없음"); if(filterMode==="checked") return checked; if(filterMode==="unchecked") return !checked; return true})}
 function badge(entry,attendance){const value=entry?.value; if(attendance){if(value==="결석") return '<span class="badge absent">결석</span>'; if(value==="조퇴") return '<span class="badge leave">조퇴</span>'; if(value==="지각") return '<span class="badge late">지각</span>'; return '<span class="badge idle">미체크</span>'} if(value==="제출") return '<span class="badge ok">제출</span>'; if(value==="해당 없음") return '<span class="badge na">해당 없음</span>'; return '<span class="badge absent">미제출</span>'}
 function renderSelectors(){refreshCurrentWeekKey(); const catSel=document.getElementById("currentCategory"), currentCat=currentCategory; catSel.innerHTML=""; state.categories.forEach(cat=>{const op=document.createElement("option"); op.value=cat; op.textContent=cat; if(cat===currentCat) op.selected=true; catSel.appendChild(op)}); const weekSel=document.getElementById("weekSelect"), opts=getWeekOptions(currentDate); weekSel.innerHTML=""; opts.forEach(o=>{const op=document.createElement("option"); op.value=o.key; op.textContent=o.label; if(o.key===currentWeekKey) op.selected=true; weekSel.appendChild(op)}); weekSel.style.display=isAttendanceCategory(currentCategory)?"none":"inline-block"; const dateEl=document.getElementById("currentDate"); if(dateEl) dateEl.style.display=isAttendanceCategory(currentCategory)?"inline-block":"none"; const histStudent=document.getElementById("historyStudent"), hs=histStudent.value||"전체"; histStudent.innerHTML='<option value="전체">전체 학생</option>'; state.students.forEach(s=>{const op=document.createElement("option"); op.value=s; op.textContent=s; histStudent.appendChild(op)}); histStudent.value=state.students.includes(hs)?hs:"전체"; const histCategory=document.getElementById("historyCategory"), hc=histCategory.value||"전체"; histCategory.innerHTML='<option value="전체">전체 항목</option>'; state.categories.forEach(c=>{const op=document.createElement("option"); op.value=c; op.textContent=c; histCategory.appendChild(op)}); histCategory.value=state.categories.includes(hc)?hc:"전체"; document.getElementById("modeHint").textContent=isAttendanceCategory(currentCategory)?"출결은 날짜 기준":"주간 항목은 월~일 기준 주간"}
+
+function updateFilterLabels(){
+  const checkedLabel = document.getElementById("checkedFilterLabel");
+  const uncheckedLabel = document.getElementById("uncheckedFilterLabel");
+  if(!checkedLabel || !uncheckedLabel) return;
+  if(isAttendanceCategory(currentCategory)){
+    checkedLabel.textContent = "이상 출결 학생";
+    uncheckedLabel.textContent = "미체크 학생";
+  }else{
+    checkedLabel.textContent = "제출학생";
+    uncheckedLabel.textContent = "미제출학생";
+  }
+}
+
 function renderChips(){const box=document.getElementById("categoryChips"); box.innerHTML=""; state.categories.forEach(cat=>{const wrap=document.createElement("div"); wrap.className="chip-wrap"; const btn=document.createElement("button"); btn.className="chip"+(cat===currentCategory?" active":""); btn.textContent=cat; btn.onclick=()=>{currentCategory=cat; draftNotes={}; refreshCurrentWeekKey(); render()}; wrap.appendChild(btn); if(!DEFAULT_CATEGORIES.includes(cat)){const del=document.createElement("button"); del.className="red"; del.textContent="삭제"; del.onclick=()=>{if(!confirm(`'${cat}' 항목을 삭제할까?`)) return; state.categories=state.categories.filter(c=>c!==cat); Object.keys(state.records).forEach(period=>state.students.forEach(student=>delete state.records[period][student][cat])); if(!state.categories.includes(currentCategory)) currentCategory=(state.categories[0]==="출결 체크"?"출결":state.categories[0])||"출결"; saveState(); render()}; wrap.appendChild(del)} box.appendChild(wrap)})}
 function renderSideList(){const box=document.getElementById("studentSideList"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach((student,idx)=>{const entry=state.records[period][student]?.[currentCategory]; const item=document.createElement("div"); item.className="mini-item"; item.innerHTML=`<div><div style="font-weight:800">${idx+1}. ${student}</div><div class="muted" style="font-size:12px">${String(normalizeValue(currentCategory, entry?.value) ?? "-")}</div></div>`; box.appendChild(item)})}
 function renderBulkArea(){const box=document.getElementById("bulkArea"); box.innerHTML=""; if(isWeeklyCategory(currentCategory)){const submit=document.createElement("button"); submit.className="green"; submit.textContent="전체 제출"; submit.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="제출"}); saveState(); render()}; const missing=document.createElement("button"); missing.className="ghost"; missing.textContent="전체 미제출"; missing.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="미제출"}); saveState(); render()}; const na=document.createElement("button"); na.className="gray"; na.textContent="전체 해당 없음"; na.onclick=()=>{const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory].value="해당 없음"}); saveState(); render()}; box.appendChild(submit); box.appendChild(missing); box.appendChild(na)}}
@@ -1201,7 +1215,8 @@ function renderHistory(){
   refreshDetailCardsActive();
 }
 function render(){refreshCurrentWeekKey(); ensurePeriodRecord(getCurrentPeriodKey()); draftNotes={}; saveState(); document.getElementById("currentDate").value=currentDate; document.getElementById("dateLabel").textContent=formatPeriodKey(getCurrentPeriodKey(), currentCategory);
-  const catDisplay=document.getElementById("currentCategoryDisplay"); if(catDisplay) catDisplay.textContent=currentCategory; document.getElementById("totalStudents").textContent=state.students.length; const c=checkedCount(); document.getElementById("checkedCount").textContent=c; document.getElementById("uncheckedCount").textContent=state.students.length-c; renderSelectors(); renderChips(); renderSideList(); renderBulkArea(); renderStudents(); renderHistory()}
+  const catDisplay=document.getElementById("currentCategoryDisplay"); if(catDisplay) catDisplay.textContent=currentCategory; document.getElementById("totalStudents").textContent=state.students.length; const c=checkedCount(); document.getElementById("checkedCount").textContent=c; document.getElementById("uncheckedCount").textContent=state.students.length-c; renderSelectors(); renderChips(); renderSideList(); renderBulkArea(); updateFilterLabels();
+  renderStudents(); renderHistory()}
 
 function setCloudStatus(text){
   const el = document.getElementById("cloudStatus");
