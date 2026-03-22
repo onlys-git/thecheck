@@ -139,7 +139,7 @@
       box-shadow:0 10px 24px rgba(0,0,0,.16);
     }
     .student-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}
-    .name-wrap{display:flex;gap:10px;align-items:center;min-width:0}
+    .name-wrap{display:flex;gap:10px;align-items:center;min-width:0;flex:1 1 auto;}
     .num{
       width:44px;height:44px;border-radius:999px;
       background:#e2e8f0;color:#334155;
@@ -152,8 +152,8 @@
     }
     .num.photo{background-color:#fff;color:transparent}
     .num.placeholder{width:44px;height:44px}
-    .name{font-size:19px;font-weight:700;color:#0f172a}
-    .badge{min-width:88px;height:88px;padding:0 14px;border-radius:999px;font-size:16px;font-weight:900;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;box-shadow:none;letter-spacing:-.02em;border:1px solid transparent}
+    .name{font-size:19px;font-weight:700;color:#0f172a;white-space:nowrap;word-break:keep-all;}
+    .badge{min-width:76px;height:76px;padding:0 14px;border-radius:999px;font-size:15px;font-weight:900;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;box-shadow:none;letter-spacing:-.02em;border:1px solid transparent}
     .ok{background:#00c73c;color:#fff;border:1px solid #00c73c}
     .idle{background:#eef2f7;color:#475569}
     .absent{background:#ff3b30;color:#fff;border:1px solid #ff3b30}
@@ -492,6 +492,7 @@
 
     .status-side{
       display:flex;
+      flex:0 0 auto;
       align-items:center;
       gap:12px;
       margin-left:auto;
@@ -503,8 +504,8 @@
       gap:10px;
     }
     .prev-week-dot{
-      width:46px;
-      height:46px;
+      width:30px;
+      height:30px;
       border-radius:999px;
       border:1px solid rgba(15,23,42,.08);
       flex-shrink:0;
@@ -512,11 +513,11 @@
     .prev-submit{background:#00c73c;}
     .prev-missing{background:#ff3b30;}
     .prev-na{background:#9ca3af;}
-    .prev-empty{background:#d1d5db;}
+    .prev-empty{background:transparent;border-color:transparent;}
     @media (max-width:900px){
       .status-side{gap:8px;}
-      .prev-week-dot{width:28px;height:28px;}
-      .badge{min-width:72px;height:72px;font-size:14px;}
+      .prev-week-dot{width:22px;height:22px;}
+      .badge{min-width:64px;height:64px;font-size:14px;}
     }
 </style>
 </head>
@@ -754,6 +755,13 @@ function getWeekOptions(dateStr){
   return arr;
 }
 function formatPeriodKey(periodKey, category=currentCategory){
+  if(String(periodKey).startsWith("W-")){
+    const start = String(periodKey).slice(2);
+    const end = addDays(start, 6);
+    const [,sm,sd] = start.split("-");
+    const [,em,ed] = end.split("-");
+    return sm===em ? `${sm}.${sd} ~ ${ed}` : `${sm}.${sd} ~ ${em}.${ed}`;
+  }
   if(/^\d{4}-\d{2}-\d{2}$/.test(periodKey) && !isAttendanceCategory(category)){
     const start = normalizeWeekKey(periodKey);
     const end = addDays(start, 6);
@@ -767,6 +775,19 @@ function getRelativeWeekKey(baseWeekKey, offsetWeeks){
   const start = normalizeWeekKey(baseWeekKey || currentWeekKey || currentDate);
   return addDays(start, offsetWeeks * 7);
 }
+function getWeeklyStorageKey(weekKey){
+  return `W-${normalizeWeekKey(weekKey || currentWeekKey || currentDate)}`;
+}
+function hasMeaningfulWeeklyRecord(periodKey, category){
+  const weekRec = state.records[periodKey];
+  if(!weekRec || isAttendanceCategory(category)) return false;
+  return state.students.some(student=>{
+    const entry = weekRec?.[student]?.[category];
+    if(!entry) return false;
+    const value = normalizeValue(category, entry.value);
+    return value !== "미제출" || String(entry.note || "").trim() !== "";
+  });
+}
 function getWeeklyStatusClass(status){
   if(status==="제출") return "prev-submit";
   if(status==="미제출") return "prev-missing";
@@ -776,10 +797,12 @@ function getWeeklyStatusClass(status){
 function getPreviousWeeklyEntry(student, offsetWeeks){
   if(isAttendanceCategory(currentCategory)) return null;
   const weekKey = getRelativeWeekKey(currentWeekKey || currentDate, offsetWeeks);
-  ensurePeriodRecord(weekKey);
-  const entry = state.records[weekKey]?.[student]?.[currentCategory];
-  if(!entry) return { weekKey, value: "기록 없음" };
-  return { weekKey, value: normalizeValue(currentCategory, entry.value) };
+  const storageKey = getWeeklyStorageKey(weekKey);
+  const weekRec = state.records[storageKey];
+  if(!weekRec || !hasMeaningfulWeeklyRecord(storageKey, currentCategory)) return null;
+  const entry = weekRec?.[student]?.[currentCategory];
+  if(!entry) return null;
+  return { weekKey: storageKey, value: normalizeValue(currentCategory, entry.value) };
 }
 function normalizeValue(category, value){
   if(isAttendanceCategory(category)){
@@ -825,6 +848,24 @@ function loadState(){
               rec[cat] = { value: normalizeValue(cat, entry), note: "" };
             }
           });
+
+          // move meaningful weekly data from plain date keys to W- keys
+          const weeklyCats = Object.keys(rec).filter(cat => !isAttendanceCategory(cat));
+          const hasWeeklyMeaningful = weeklyCats.some(cat => {
+            const e = rec[cat];
+            return normalizeValue(cat, e?.value) !== "미제출" || String(e?.note || "").trim() !== "";
+          });
+          if(hasWeeklyMeaningful){
+            const wk = getWeeklyStorageKey(period);
+            if(!records[wk]) records[wk] = {};
+            if(!records[wk][student]) records[wk][student] = emptyRecord(categories);
+            weeklyCats.forEach(cat => {
+              records[wk][student][cat] = {
+                value: normalizeValue(cat, rec[cat]?.value),
+                note: rec[cat]?.note || ""
+              };
+            });
+          }
         }
       });
     });
@@ -838,7 +879,7 @@ function saveState(){localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
 function getDefaultValue(category){return isAttendanceCategory(category)?"미체크":"미제출"}
 function ensurePeriodRecord(periodKey){if(!state.records[periodKey]) state.records[periodKey]={}; state.students.forEach(student=>{if(!state.records[periodKey][student]) state.records[periodKey][student]=emptyRecord(state.categories); state.categories.forEach(cat=>{const e=state.records[periodKey][student][cat]; if(!e) state.records[periodKey][student][cat]={value:getDefaultValue(cat),note:""}; else if(typeof e!=="object"||!("value" in e)) state.records[periodKey][student][cat]={value:normalizeValue(cat,e),note:""}; else state.records[periodKey][student][cat]={value:normalizeValue(cat,e.value),note:e.note||""}})})}
 function refreshCurrentWeekKey(){const opts=getWeekOptions(currentDate), auto=getMonthWeek(currentDate), valid=opts.map(o=>o.key); currentWeekKey = normalizeWeekKey(currentWeekKey || auto); if(!valid.includes(currentWeekKey)) currentWeekKey=auto}
-function getCurrentPeriodKey(){return isAttendanceCategory(currentCategory)?currentDate:normalizeWeekKey(currentWeekKey || currentDate)}
+function getCurrentPeriodKey(){return isAttendanceCategory(currentCategory)?currentDate:getWeeklyStorageKey(currentWeekKey || currentDate)}
 function renameStudent(oldName,newName){newName=(newName||"").trim(); if(!newName||oldName===newName) return; if(state.students.includes(newName)){alert("이미 있는 학생 이름이야."); return;} state.students=state.students.map(n=>n===oldName?newName:n); Object.keys(state.records).forEach(period=>{const rec=state.records[period][oldName]; if(rec){state.records[period][newName]=rec; delete state.records[period][oldName]}}); if(draftNotes[oldName]!==undefined){draftNotes[newName]=draftNotes[oldName]; delete draftNotes[oldName]}}
 function deleteStudent(name){if(!confirm(`${name} 학생을 삭제할까요? 저장된 기록에서도 함께 제거돼요.`)) return; state.students=state.students.filter(n=>n!==name); Object.keys(state.records).forEach(period=>{if(state.records[period]&&state.records[period][name]) delete state.records[period][name]}); if(draftNotes[name]!==undefined) delete draftNotes[name]; saveState(); render()}
 function replaceAllStudents(names){const unique=[...new Set((names||[]).map(n=>String(n).trim()).filter(Boolean))]; if(!unique.length){alert("불러올 학생 이름이 없어요."); return;} if(!confirm("현재 학생 명단을 새 명단으로 전체 교체할까요? 기존 기록은 같은 이름 학생만 유지되고, 없는 학생 기록은 사라질 수 있어요.")) return; state.students=unique; Object.keys(state.records).forEach(period=>{const oldSet=state.records[period]||{}, newSet={}; state.students.forEach(student=>{newSet[student]=oldSet[student]||emptyRecord(state.categories)}); state.records[period]=newSet}); draftNotes={}; render()}
@@ -858,7 +899,50 @@ function renderBulkArea(){const box=document.getElementById("bulkArea"); box.inn
 function renderStudents(){const box=document.getElementById("studentGrid"); box.innerHTML=""; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); filteredStudents().forEach((student,idx)=>{const entry=state.records[period][student][currentCategory]; const card=document.createElement("div"); card.className="student-card"; const weekly=isWeeklyCategory(currentCategory); const prev1 = weekly ? getPreviousWeeklyEntry(student, -1) : null;
 const prev2 = weekly ? getPreviousWeeklyEntry(student, -2) : null;
 card.innerHTML=`<div class="student-head"><div class="name-wrap">${getStudentPhoto(student)?`<div class="num photo" style="background-image:url(${getStudentPhoto(student)})"></div>`:`<div class="num placeholder">${idx+1}</div>`}<div class="name">${student}</div></div><div class="status-side">${weekly?`<div class="prev-week-dots" title="왼쪽부터 지난주, 지지난주"><div class="prev-week-dot ${getWeeklyStatusClass(prev1?.value)}"></div><div class="prev-week-dot ${getWeeklyStatusClass(prev2?.value)}"></div></div>`:""}${badge(entry,!weekly)}</div></div><div class="toolbar-row" style="margin-bottom:8px"><button class="ghost small meta-btn" data-a="rename">이름 수정</button><button class="ghost small meta-btn" data-a="delete">학생 삭제</button></div>${weekly?`<div class="actions three"><button class="action-btn action-submit" data-a="제출">제출</button><button class="action-btn action-missing" data-a="미제출">미제출</button><button class="action-btn action-na" data-a="해당 없음">해당 없음</button></div>`:`<div class="actions"><button class="action-btn action-unchecked" data-a="미체크">미체크</button><button class="action-btn action-absent" data-a="결석">결석</button><button class="action-btn action-leave" data-a="조퇴">조퇴</button><button class="action-btn action-late" data-a="지각">지각</button></div>`}<div class="note-box"><textarea placeholder="${weekly?"예: 이번 주는 과제가 없었음.":"예: 감기, 병원 진료"}">${draftNotes[student] ?? entry.note ?? ""}</textarea><button class="ghost">특기사항 저장</button></div>`; card.querySelectorAll("[data-a]").forEach(btn=>{btn.onclick=()=>{if(btn.dataset.a==="rename"){const newName=prompt("새 학생 이름을 입력해줘.", student); if(newName!==null){renameStudent(student,newName); saveState(); render()} return;} if(btn.dataset.a==="delete"){deleteStudent(student); return;} state.records[period][student][currentCategory].value=btn.dataset.a; saveState(); render()}}); const textarea=card.querySelector("textarea"); textarea.oninput=e=>{draftNotes[student]=e.target.value}; card.querySelector(".note-box button").onclick=()=>{state.records[period][student][currentCategory].note=textarea.value||""; draftNotes[student]=textarea.value||""; saveState(); render()}; box.appendChild(card)})}
-function historyRows(){const start=document.getElementById("historyStart").value, end=document.getElementById("historyEnd").value, studentFilter=document.getElementById("historyStudent").value, categoryFilter=document.getElementById("historyCategory").value, mode=document.getElementById("historyMode").value; const rows=[]; Object.keys(state.records).sort().forEach(period=>{const normalizedPeriod = (categoryFilter!=="전체" ? null : null); const monthKey=(/^\d{4}-\d{2}-\d{2}$/.test(period) ? normalizeWeekKey(period).slice(0,7) : period.slice(0,7)); if(start&&monthKey<start) return; if(end&&monthKey>end) return; state.students.forEach(student=>{const rec=state.records[period][student]; if(!rec) return; state.categories.forEach(category=>{const entry=rec[category]; if(!entry) return; const row={period,student,category,value:normalizeValue(category, entry.value),note:entry.note||""}; if(studentFilter!=="전체"&&row.student!==studentFilter) return; if(categoryFilter!=="전체"&&row.category!==categoryFilter) return; if(mode==="결석만"&&!(row.category==="출결"&&row.value==="결석")) return; if(mode==="조퇴만"&&!(row.category==="출결"&&row.value==="조퇴")) return; if(mode==="지각만"&&!(row.category==="출결"&&row.value==="지각")) return; if(mode==="미제출만"&&!(row.category!=="출결"&&row.value==="미제출")) return; if(mode==="제출만"&&!(row.category!=="출결"&&row.value==="제출")) return; if(mode==="해당없음만"&&!(row.category!=="출결"&&row.value==="해당 없음")) return; if(mode==="메모만"&&!String(row.note||"").trim()) return; rows.push(row)})})}); return rows}
+function historyRows(){
+  const start=document.getElementById("historyStart").value,
+        end=document.getElementById("historyEnd").value,
+        studentFilter=document.getElementById("historyStudent").value,
+        categoryFilter=document.getElementById("historyCategory").value,
+        mode=document.getElementById("historyMode").value;
+  const rows=[];
+  Object.keys(state.records).sort().forEach(period=>{
+    const isWeeklyPeriod = String(period).startsWith("W-");
+    const basePeriod = isWeeklyPeriod ? String(period).slice(2) : period;
+    const monthKey = normalizeWeekKey(basePeriod).slice(0,7);
+    if(start && monthKey < start) return;
+    if(end && monthKey > end) return;
+
+    state.students.forEach(student=>{
+      const rec=state.records[period]?.[student];
+      if(!rec) return;
+
+      state.categories.forEach(category=>{
+        if(isAttendanceCategory(category) && isWeeklyPeriod) return;
+        if(!isAttendanceCategory(category) && !isWeeklyPeriod) return;
+
+        const entry=rec[category];
+        if(!entry) return;
+
+        const row={period,student,category,value:normalizeValue(category, entry.value),note:entry.note||""};
+
+        if(studentFilter!=="전체" && row.student!==studentFilter) return;
+        if(categoryFilter!=="전체" && row.category!==categoryFilter) return;
+
+        if(mode==="결석만" && !(row.category==="출결"&&row.value==="결석")) return;
+        if(mode==="조퇴만" && !(row.category==="출결"&&row.value==="조퇴")) return;
+        if(mode==="지각만" && !(row.category==="출결"&&row.value==="지각")) return;
+        if(mode==="미제출만" && !(row.category!=="출결"&&row.value==="미제출")) return;
+        if(mode==="제출만" && !(row.category!=="출결"&&row.value==="제출")) return;
+        if(mode==="해당없음만" && !(row.category!=="출결"&&row.value==="해당 없음")) return;
+        if(mode==="메모만" && !String(row.note||"").trim()) return;
+
+        rows.push(row);
+      });
+    });
+  });
+  return rows;
+}
 function exportCsv(){const period=getCurrentPeriodKey(); ensurePeriodRecord(period); const rows=[["번호","이름","기준", ...state.categories.flatMap(cat=>[cat, `${cat} 특기사항`])]]; state.students.forEach((student,idx)=>{const row=[idx+1,student,formatPeriodKey(period, currentCategory)]; state.categories.forEach(cat=>{const entry=state.records[period][student][cat]; row.push(entry?.value??""); row.push(entry?.note??"")}); rows.push(row)}); const csv=rows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`학생체크_${formatPeriodKey(period)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)}
 
 function getHistoryRows(){
