@@ -558,7 +558,7 @@
         현재 체크 항목: <span id="currentCategoryDisplay">-</span>
       </div>
       <div class="muted" id="modeHint">준비됨</div>
-      <div class="muted" id="cloudStatus"></div>
+      <div class="muted" id="cloudStatus">자동 불러오기 대기 중</div>
     </div>
   </div>
 
@@ -1273,7 +1273,16 @@ async function saveCurrentToCloud() {
   }
 }
 
-async function loadCurrentFromCloud() {
+async 
+let autoCloudLoadTimer = null;
+function scheduleAutoCloudLoad(delay=120){
+  if(autoCloudLoadTimer) clearTimeout(autoCloudLoadTimer);
+  autoCloudLoadTimer = setTimeout(() => {
+    loadCurrentFromCloud();
+  }, delay);
+}
+
+function loadCurrentFromCloud() {
   try{
     setCloudStatus("불러오는 중");
     let reqUrl = "";
@@ -1320,7 +1329,7 @@ async function loadCurrentFromCloud() {
   }
 }
 
-function bind(){document.getElementById("currentDate").onchange=e=>{currentDate=e.target.value||today(); refreshCurrentWeekKey(); render()}; document.getElementById("currentCategory").onchange=e=>{currentCategory=e.target.value; draftNotes={}; refreshCurrentWeekKey(); render()}; document.getElementById("weekSelect").onchange=e=>{currentWeekKey=normalizeWeekKey(e.target.value); draftNotes={}; render()}; document.getElementById("todayBtn").onclick=()=>{currentDate=today(); refreshCurrentWeekKey(); render()}; document.getElementById("loadCloudBtn").onclick=loadCurrentFromCloud; document.getElementById("saveCloudBtn").onclick=saveCurrentToCloud; document.getElementById("goHistoryBtn").onclick=()=>document.getElementById("historySection").scrollIntoView({behavior:"smooth", block:"start"}); document.getElementById("searchInput").oninput=render; document.querySelectorAll("[data-filter]").forEach(btn=>btn.onclick=()=>{filterMode=btn.dataset.filter; render()}); document.getElementById("studentInput").onkeydown=e=>{if(e.key==="Enter") document.getElementById("addStudentBtn").click()}; document.getElementById("addStudentBtn").onclick=()=>{const name=document.getElementById("studentInput").value.trim(); if(!name) return; if(state.students.includes(name)){alert("이미 있는 학생 이름이야."); return;} state.students.push(name); document.getElementById("studentInput").value=""; render()}; document.getElementById("categoryInput").onkeydown=e=>{if(e.key==="Enter") document.getElementById("addCategoryBtn").click()}; document.getElementById("addCategoryBtn").onclick=()=>{const name=document.getElementById("categoryInput").value.trim(); if(!name) return; if(state.categories.includes(name)){alert("이미 있는 체크 항목이야."); return;} state.categories.push(name); Object.keys(state.records).forEach(period=>state.students.forEach(student=>{state.records[period][student][name]={value:"미제출",note:""}})); currentCategory=name; document.getElementById("categoryInput").value=""; render()}; document.getElementById("pasteStudentsBtn").onclick=()=>{const text=document.getElementById("studentPasteInput").value; addStudents(parseNamesFromText(text))}; document.getElementById("importFileBtn").onclick=()=>handleFileImport(false); document.getElementById("replaceStudentsBtn").onclick=()=>handleFileImport(true); ["historyStart","historyEnd","historyStudent","historyCategory","historyMode"].forEach(id=>document.getElementById(id).onchange=render);
+function bind(){document.getElementById("currentDate").onchange=e=>{currentDate=e.target.value||today(); refreshCurrentWeekKey(); render(); scheduleAutoCloudLoad(150);}; document.getElementById("currentCategory").onchange=e=>{currentCategory=e.target.value; draftNotes={}; refreshCurrentWeekKey(); render(); scheduleAutoCloudLoad(150);}; document.getElementById("weekSelect").onchange=e=>{currentWeekKey=normalizeWeekKey(e.target.value); draftNotes={}; render(); scheduleAutoCloudLoad(150);}; document.getElementById("todayBtn").onclick=()=>{currentDate=today(); refreshCurrentWeekKey(); render()}; document.getElementById("loadCloudBtn").onclick=loadCurrentFromCloud; document.getElementById("saveCloudBtn").onclick=saveCurrentToCloud; document.getElementById("goHistoryBtn").onclick=()=>document.getElementById("historySection").scrollIntoView({behavior:"smooth", block:"start"}); document.getElementById("searchInput").oninput=render; document.querySelectorAll("[data-filter]").forEach(btn=>btn.onclick=()=>{filterMode=btn.dataset.filter; render()}); document.getElementById("studentInput").onkeydown=e=>{if(e.key==="Enter") document.getElementById("addStudentBtn").click()}; document.getElementById("addStudentBtn").onclick=()=>{const name=document.getElementById("studentInput").value.trim(); if(!name) return; if(state.students.includes(name)){alert("이미 있는 학생 이름이야."); return;} state.students.push(name); document.getElementById("studentInput").value=""; render()}; document.getElementById("categoryInput").onkeydown=e=>{if(e.key==="Enter") document.getElementById("addCategoryBtn").click()}; document.getElementById("addCategoryBtn").onclick=()=>{const name=document.getElementById("categoryInput").value.trim(); if(!name) return; if(state.categories.includes(name)){alert("이미 있는 체크 항목이야."); return;} state.categories.push(name); Object.keys(state.records).forEach(period=>state.students.forEach(student=>{state.records[period][student][name]={value:"미제출",note:""}})); currentCategory=name; document.getElementById("categoryInput").value=""; render()}; document.getElementById("pasteStudentsBtn").onclick=()=>{const text=document.getElementById("studentPasteInput").value; addStudents(parseNamesFromText(text))}; document.getElementById("importFileBtn").onclick=()=>handleFileImport(false); document.getElementById("replaceStudentsBtn").onclick=()=>handleFileImport(true); ["historyStart","historyEnd","historyStudent","historyCategory","historyMode"].forEach(id=>document.getElementById(id).onchange=render);
   document.getElementById("tabAttendanceHistory").onclick=()=>{historyViewMode="attendance"; historyDetailFilter=""; renderHistory();};
   document.getElementById("tabWeeklyHistory").onclick=()=>{historyViewMode="weekly"; historyDetailFilter=""; renderHistory();};
   document.getElementById("attendanceAbsentCard").onclick=()=>{historyViewMode="attendance"; historyDetailFilter="결석"; renderHistory();};
@@ -1332,6 +1341,7 @@ function bind(){document.getElementById("currentDate").onchange=e=>{currentDate=
   document.getElementById("weeklyNACard").onclick=()=>{historyViewMode="weekly"; historyDetailFilter="해당 없음"; renderHistory();};
   document.getElementById("weeklyMemoCard").onclick=()=>{historyViewMode="weekly"; historyDetailFilter="메모"; renderHistory();}; document.getElementById("clearPeriodBtn").onclick=()=>{document.getElementById("historyStart").value=""; document.getElementById("historyEnd").value=""; render()};   document.getElementById("resetBtn").onclick=()=>{if(!confirm(`${formatPeriodKey(getCurrentPeriodKey())}의 '${currentCategory}' 항목을 초기화할까요?`)) return; const period=getCurrentPeriodKey(); ensurePeriodRecord(period); state.students.forEach(student=>{state.records[period][student][currentCategory]={value:getDefaultValue(currentCategory),note:""}}); render()}}
 refreshCurrentWeekKey(); ensurePeriodRecord(getCurrentPeriodKey()); bind(); render();
+scheduleAutoCloudLoad(300);
 </script>
 </body>
 </html>
